@@ -12,7 +12,7 @@ import java.time.LocalDate;
 @Enitity
 public class Student extends Person {
 
-  @Column(name = "fk_StudentNo")
+  @Column()
   private int studentNumber;
 
   public Student(int id, String firstName, String lastName, LocalDate birthday, Gender gender, int studentNumber) {

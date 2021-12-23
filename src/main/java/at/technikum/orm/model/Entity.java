@@ -7,6 +7,7 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Stream;
@@ -27,13 +28,13 @@ public class Entity {
   private EntityField primaryKey;
   private final String tableName;
 
-  public static Entity ofClass(Class<?> type) {
-    if (entityCache.containsKey(type)) {
-      log.info("Cache hit on {}", type.getSimpleName());
-      return entityCache.get(type);
+  public static Entity ofClass(Class<?> clazz) {
+    if (entityCache.containsKey(clazz)) {
+      log.info("Cache hit on {}", clazz.getSimpleName());
+      return entityCache.get(clazz);
     }
-    var entity = new Entity(type);
-    entityCache.put(type, entity);
+    var entity = new Entity(clazz);
+    entityCache.put(clazz, entity);
     return entity;
   }
 
@@ -54,7 +55,7 @@ public class Entity {
     }
     allFieldsFor(type).forEach(field -> {
       var ignore = field.getAnnotation(Ignore.class);
-      if (ignore != null) {
+      if (ignore != null || Modifier.isStatic(field.getModifiers())) {
         return;
       }
       var primaryKeyAnnotation = field.getAnnotation(PrimaryKey.class);
@@ -67,6 +68,9 @@ public class Entity {
       }
       if (foreignKey != null) {
         newEntity.setFK(true);
+        if (isNotBlank(foreignKey.columnName())) {
+          newEntity.setName(foreignKey.columnName());
+        }
         foreignKeys.add(newEntity);
       }
       entityFields.add(newEntity);

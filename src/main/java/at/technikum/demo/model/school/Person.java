@@ -14,6 +14,7 @@ import java.time.LocalDate;
 @Setter
 @NoArgsConstructor
 public abstract class Person {
+
     private static int counter = 1;
 
     @PrimaryKey

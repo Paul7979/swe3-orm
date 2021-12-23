@@ -19,10 +19,10 @@ public class Teacher extends Person {
     
     private LocalDate hireDate;
 
-    @ForeignKey
+    @ForeignKey()
     private List<SClass> classes;
 
-    @ForeignKey
+    @ForeignKey()
     private List<Course> courses;
 
     public Teacher(String id, String name, String firstName, LocalDate birthDate, Gender gender, int salary, LocalDate hireDate, List<SClass> classes, List<Course> courses) {
@@ -32,4 +32,11 @@ public class Teacher extends Person {
         this.classes = classes;
         this.courses = courses;
     }
+
+    public Teacher(int salary, LocalDate hireDate, String id, String name,  String firstName, LocalDate birthDate, Gender gender) {
+        super(id, name, firstName, birthDate, gender);
+        this.salary = salary;
+        this.hireDate = hireDate;
+    }
+
 }

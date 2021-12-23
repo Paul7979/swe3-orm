@@ -4,11 +4,13 @@ import at.technikum.orm.annotations.Enitity;
 import at.technikum.orm.annotations.ForeignKey;
 import at.technikum.orm.annotations.PrimaryKey;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.util.ArrayList;
 
 @Enitity(tableName = "COURSES")
 @Data
+@NoArgsConstructor
 public class Course 
 {
     @PrimaryKey
