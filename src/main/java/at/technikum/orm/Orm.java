@@ -1,9 +1,13 @@
 package at.technikum.orm;
 
+import at.technikum.orm.cache.Cache;
+import at.technikum.orm.cache.CacheKeyWrapper;
+import at.technikum.orm.cache.InMemoryCache;
 import at.technikum.orm.model.Entity;
 import at.technikum.orm.model.EntityField;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.text.StringSubstitutor;
+import org.postgresql.core.Tuple;
 
 import java.lang.reflect.Constructor;
 import java.sql.SQLException;
@@ -24,13 +28,21 @@ public class Orm {
     WHERE (${pkColumnName}) = ?""";
 
 
-  private ConnectionFactory connectionFactory;
+  private final ConnectionFactory connectionFactory;
+  private final Cache<CacheKeyWrapper, Object> cache;
 
   public Orm(String url) throws SQLException {
     connectionFactory =  ConnectionFactory.of(url);
+    cache = new InMemoryCache<>();
   }
 
   public <T>T get(Class<T> clazz, Object ID) throws SQLException {
+    var cacheKeyWrapper = new CacheKeyWrapper(clazz, ID);
+    var cachedObject = cache.get(cacheKeyWrapper);
+    if (cachedObject != null) {
+      log.info("Hit Cache on class {} with id {}", clazz.getSimpleName(), ID);
+      return (T) cachedObject;
+    }
     var entity = Entity.ofClass(clazz);
     var entityFields = entity.getEntityFields().stream()
       .filter(Predicate.not(EntityField::isFK))
@@ -67,11 +79,12 @@ public class Orm {
 
       //try to get a matching constructor - else use no args const and reflection
       try {
-
         Constructor<T> allArgsConstructor = tryToGetAllArgsConstructor(entity, columnTypes);
         if (allArgsConstructor != null) {
           allArgsConstructor.setAccessible(true);
-          return allArgsConstructor.newInstance(values.toArray());
+          var newInstance = allArgsConstructor.newInstance(values.toArray());
+          cache.put(cacheKeyWrapper, newInstance);
+          return newInstance;
         }
 
         Constructor<?> noArgsConstructor = tryToGetNoArgsConstructor(entity);
@@ -81,6 +94,7 @@ public class Orm {
           for (int i = 0; i < values.size(); i++) {
             entityFields.get(i).setValue(o, values.get(i));
           }
+          cache.put(cacheKeyWrapper, o);
           return o;
         }
 
@@ -96,7 +110,6 @@ public class Orm {
 
     Entity entity = Entity.ofClass(o.getClass());
 
-
     List<String> columnNames = new ArrayList<>(entity.getEntityFields().size());
     List<String> columnNamesWithoutPK = new ArrayList<>(entity.getEntityFields().size());
     List<Object> values = new ArrayList<>();
@@ -104,25 +117,26 @@ public class Orm {
 
     entity.getEntityFields().forEach(entityField -> {
       if (entityField.isFK()) {
-        if (classes.contains(entityField.getType())){
-          return;
-        }
         var fkToStore = entityField.getValue(o);
-        if (entityField.toDbObject(fkToStore) == null) {
+        if (fkToStore == null) {
           return;
         }
-        classes.add(o.getClass());
-        if (entityField.isCollection() && fkToStore instanceof Collection<?> collection) {
-          collection.forEach(objToStore -> {
-            saveIgnoringFK(objToStore, classes);
-          });
+        if (!classes.contains(entityField.getType()) && !classes.contains(entityField.getRawType())) {
+          classes.add(o.getClass());
+          if (entityField.isCollection() && fkToStore instanceof Collection<?> collection) {
+            collection.forEach(objToStore -> saveIgnoringFK(objToStore, classes));
+            return;
+          }
+          saveIgnoringFK(fkToStore, classes);
+        }
+        if (entityField.isJoining()){
+          return;
         }
         columnNames.add(entityField.getName());
         columnNamesWithoutPK.add(entityField.getName());
         var value = Entity.ofClass(entityField.getType()).getPrimaryKey().getValue(fkToStore);
         valuesWithoutPK.add(value);
         values.add(value);
-        saveIgnoringFK(fkToStore, classes);
         return;
       }
       columnNames.add(entityField.getName());
@@ -154,6 +168,9 @@ public class Orm {
         preparedStatement.setObject(i+1, values.get(i));
       }
       preparedStatement.execute();
+      var primaryKey = entity.getPrimaryKey().getValue(o);
+      var cacheKeyWrapper = new CacheKeyWrapper(o.getClass(), primaryKey);
+      cache.put(cacheKeyWrapper, o);
     } catch (SQLException e) {
       throw new RuntimeException("Failed to store", e);
     }

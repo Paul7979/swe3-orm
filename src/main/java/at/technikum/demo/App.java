@@ -9,7 +9,6 @@ import lombok.extern.slf4j.Slf4j;
 import java.sql.SQLException;
 import java.time.LocalDate;
 import java.util.List;
-import java.util.UUID;
 
 
 @Slf4j
@@ -21,38 +20,52 @@ public class App
     public static final String TEACHER3_ID = "t_3";
 
     public static void main(String[] args ) throws SQLException {
-        Orm orm = null;
-        try {
-            orm = new Orm("jdbc:postgresql://localhost:5432/postgres?user=platform&password=platform");
-        } catch (SQLException e) {
-            log.info("Failed to connect to db");
-            return;
-        }
+      Orm orm = getOrm();
 
-        log.info("Storing teacher");
-        //orm.save(teacher(TEACHER1_ID));
-        log.info("Stored teacher");
+      //storeTeacher1(orm);
 
-        try {
-            var teacher = orm.get(Teacher.class, TEACHER1_ID);
-            log.info("Fetched Teacher {} {}", teacher.getFirstName(), teacher.getName());
-        } catch (SQLException e) {
-            log.error("Could not fetch teacher", e);
-        }
-        var sClass1 = sClass1(teacher(TEACHER2_ID));
-        var sClass2 = sClass2(teacher(TEACHER1_ID));
-        //orm.save(sClass1);
-        //orm.save(sClass2);
+      //fetchTeacher1(orm);
+      saveClassWithTeacher1ToN(orm);
+      //var sClass2 = sClass2(teacher(TEACHER1_ID));
+      //orm.save(sClass2);
 
-        var teacher3 = teacher(TEACHER3_ID);
-        teacher3.setClasses(List.of(sClassRandId(teacher3), sClassRandId(teacher3)));
-        orm.save(teacher3);
+      //storeTeacherWithClasses1ToN(orm);
 
-        var teacher2 = orm.get(Teacher.class, TEACHER2_ID);
+      //var teacher2 = orm.get(Teacher.class, TEACHER2_ID);
 
     }
 
-    private static Teacher teacher (String id) {
+  private static void saveClassWithTeacher1ToN(Orm orm) throws SQLException {
+    var sClass1 = sClass1(teacher(TEACHER2_ID));
+    orm.save(sClass1);
+  }
+
+  private static void storeTeacherWithClasses1ToN(Orm orm) throws SQLException {
+    var teacher3 = teacher(TEACHER3_ID);
+    teacher3.setClasses(List.of(sClassId(teacher3, "cl_1"), sClassId(teacher3, "cl_2")));
+    orm.save(teacher3);
+  }
+
+  private static Orm getOrm() throws SQLException {
+    return new Orm("jdbc:postgresql://localhost:5432/postgres?user=platform&password=platform");
+  }
+
+  private static void storeTeacher1(Orm orm) throws SQLException {
+    log.info("Storing teacher");
+    orm.save(teacher(TEACHER1_ID));
+    log.info("Stored teacher");
+  }
+
+  private static void fetchTeacher1(Orm orm) {
+    try {
+       var teacher = orm.get(Teacher.class, TEACHER1_ID);
+        log.info("Fetched Teacher {} {}", teacher.getFirstName(), teacher.getName());
+    } catch (SQLException e) {
+        log.error("Could not fetch teacher", e);
+    }
+  }
+
+  private static Teacher teacher (String id) {
         var birthDate = LocalDate.of(1980, 2, 12);
         var hireDate = LocalDate.of(2018, 4, 1);
         Teacher teacher = new Teacher();
@@ -81,9 +94,9 @@ public class App
         return sClass;
     }
 
-    private static SClass sClassRandId(Teacher teacher) {
+    private static SClass sClassId(Teacher teacher, String id) {
         SClass sClass = new SClass();
-        sClass.setId(UUID.randomUUID().toString());
+        sClass.setId(id);
         sClass.setName("RANDOM 101");
         sClass.setTeacher(teacher);
         return sClass;

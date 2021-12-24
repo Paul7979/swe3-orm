@@ -25,6 +25,10 @@ public class EntityField {
 
   private Class<?> type;
 
+  private Class<?> rawType;
+
+  private boolean joining = false;
+
   private Field field;
 
   private boolean isPK;
@@ -44,7 +48,8 @@ public class EntityField {
       if (Collection.class.isAssignableFrom((Class<?>) parameterizedType.getRawType())) {
         isCollection = true;
       }
-      type = (Class<?>) parameterizedType.getActualTypeArguments()[0]; // extracts eg. String from List<String>
+      type = field.getType();
+      rawType = (Class<?>) parameterizedType.getActualTypeArguments()[0]; // extracts eg. String from List<String>
     } else {
       this.type = field.getType();
     }
@@ -87,6 +92,9 @@ public class EntityField {
       return value.toString();
     }
     if (isFK) {
+      if (rawType != null) {
+
+      }
       var fkType = Entity.ofClass(type).getPrimaryKey();
       return fkType.toDbObject(value);
     }

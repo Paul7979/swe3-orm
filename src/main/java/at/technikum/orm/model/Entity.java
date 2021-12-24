@@ -30,7 +30,7 @@ public class Entity {
 
   public static Entity ofClass(Class<?> clazz) {
     if (entityCache.containsKey(clazz)) {
-      log.info("Cache hit on {}", clazz.getSimpleName());
+      log.info("Entity Cache hit on class {}", clazz.getSimpleName());
       return entityCache.get(clazz);
     }
     var entity = new Entity(clazz);
@@ -68,6 +68,7 @@ public class Entity {
       }
       if (foreignKey != null) {
         newEntity.setFK(true);
+        newEntity.setJoining(foreignKey.joining());
         if (isNotBlank(foreignKey.columnName())) {
           newEntity.setName(foreignKey.columnName());
         }

@@ -7,4 +7,5 @@ import java.lang.annotation.RetentionPolicy;
 public @interface ForeignKey {
   String referencesTable() default "";
   String columnName() default "";
+  boolean joining() default false;
 }
