@@ -115,8 +115,12 @@ public class EntityField {
     }
   }
 
-  public void setValue(Object o, Object value) throws IllegalAccessException {
+  public void setValue(Object o, Object value) {
     field.setAccessible(true);
-    field.set(o, value);
+    try {
+      field.set(o, value);
+    } catch (IllegalAccessException e) {
+      throw new RuntimeException("Error with reflective access to field", e);
+    }
   }
 }

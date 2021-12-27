@@ -15,23 +15,24 @@ import java.util.List;
 public class App 
 {
 
-    public static final String TEACHER1_ID = "t_1";
-    public static final String TEACHER2_ID = "t_2";
-    public static final String TEACHER3_ID = "t_3";
+  public static final String TEACHER0_ID = "t_0";
+  public static final String TEACHER1_ID = "t_1";
+  public static final String TEACHER2_ID = "t_2";
+  public static final String TEACHER3_ID = "t_3";
 
     public static void main(String[] args ) throws SQLException {
       Orm orm = getOrm();
 
-      //storeTeacher1(orm);
+      storeTeacher0(orm);
 
-      //fetchTeacher1(orm);
+      fetchTeacher1(orm);
       saveClassWithTeacher1ToN(orm);
-      //var sClass2 = sClass2(teacher(TEACHER1_ID));
-      //orm.save(sClass2);
+      var sClass2 = sClass2(teacher(TEACHER1_ID));
+      orm.save(sClass2);
 
-      //storeTeacherWithClasses1ToN(orm);
+      storeTeacherWithClasses1ToN(orm);
 
-      //var teacher2 = orm.get(Teacher.class, TEACHER2_ID);
+      var teacher2 = orm.get(Teacher.class, TEACHER2_ID);
 
     }
 
@@ -50,9 +51,9 @@ public class App
     return new Orm("jdbc:postgresql://localhost:5432/postgres?user=platform&password=platform");
   }
 
-  private static void storeTeacher1(Orm orm) throws SQLException {
+  private static void storeTeacher0(Orm orm) throws SQLException {
     log.info("Storing teacher");
-    orm.save(teacher(TEACHER1_ID));
+    orm.save(teacher(TEACHER0_ID));
     log.info("Stored teacher");
   }
 

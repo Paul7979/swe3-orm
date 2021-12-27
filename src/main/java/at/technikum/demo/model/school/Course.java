@@ -2,6 +2,7 @@ package at.technikum.demo.model.school;
 
 import at.technikum.orm.annotations.Enitity;
 import at.technikum.orm.annotations.ForeignKey;
+import at.technikum.orm.annotations.Ignore;
 import at.technikum.orm.annotations.PrimaryKey;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -14,17 +15,18 @@ import java.util.ArrayList;
 public class Course 
 {
     @PrimaryKey
-    private String _id;
+    private String id;
 
-    private String _name;
+    private String name;
 
-    private boolean _active;
+    private boolean active;
 
-    @ForeignKey
-    private Teacher _teacher;
+    @ForeignKey(columnName = "teacher_fk")
+    private Teacher teacher_fk;
 
+    @Ignore
     @ForeignKey(columnName = "Students", referencesTable = "")
-    private ArrayList<Student> _students = new ArrayList<>();
+    private ArrayList<Student> _students;
 
     
   /*

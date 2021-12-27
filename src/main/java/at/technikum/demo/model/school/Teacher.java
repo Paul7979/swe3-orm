@@ -2,6 +2,7 @@ package at.technikum.demo.model.school;
 
 import at.technikum.orm.annotations.Enitity;
 import at.technikum.orm.annotations.ForeignKey;
+import at.technikum.orm.annotations.Ignore;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;

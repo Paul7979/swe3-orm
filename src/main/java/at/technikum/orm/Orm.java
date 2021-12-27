@@ -2,18 +2,19 @@ package at.technikum.orm;
 
 import at.technikum.orm.cache.Cache;
 import at.technikum.orm.cache.CacheKeyWrapper;
+import at.technikum.orm.cache.ForeignCacheKeyWrapper;
 import at.technikum.orm.cache.InMemoryCache;
 import at.technikum.orm.model.Entity;
 import at.technikum.orm.model.EntityField;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.text.StringSubstitutor;
-import org.postgresql.core.Tuple;
 
 import java.lang.reflect.Constructor;
 import java.sql.SQLException;
 import java.util.*;
-import java.util.function.Predicate;
 import java.util.stream.Collectors;
+
+import static java.util.function.Predicate.not;
 
 @Slf4j
 public class Orm {
@@ -27,13 +28,21 @@ public class Orm {
     SELECT ${columNames} FROM ${tableName}
     WHERE (${pkColumnName}) = ?""";
 
+  private static final String SELECT_FK_TEMPLATE = """
+    SELECT ${columNames} FROM ${tableName}
+    WHERE (${fkColumnName}) = ?""";
+
+  private static final String SIMPLE_SELECT_INTERNAL = """
+    SELECT ${columNames} FROM ${tableName}""";
 
   private final ConnectionFactory connectionFactory;
   private final Cache<CacheKeyWrapper, Object> cache;
+  private final Cache<ForeignCacheKeyWrapper, Object> foreigKeyCache;
 
   public Orm(String url) throws SQLException {
     connectionFactory =  ConnectionFactory.of(url);
     cache = new InMemoryCache<>();
+    foreigKeyCache = new InMemoryCache<>();
   }
 
   public <T>T get(Class<T> clazz, Object ID) throws SQLException {
@@ -45,7 +54,7 @@ public class Orm {
     }
     var entity = Entity.ofClass(clazz);
     var entityFields = entity.getEntityFields().stream()
-      .filter(Predicate.not(EntityField::isFK))
+      .filter(not(EntityField::isFK))
       .toList();
     var columnNames = entityFields.stream()
       .map(EntityField::getName).collect(Collectors.joining(", "));
@@ -61,13 +70,13 @@ public class Orm {
     StringSubstitutor stringSubstitutor = new StringSubstitutor(substituteValues);
     var selectStatement = stringSubstitutor.replace(SELECT_TEMPLATE);
     log.info(selectStatement);
+    Object o = null;
     try (
       var connection = connectionFactory.get();
       var preparedStatement = connection.prepareStatement(selectStatement)
     ) {
       preparedStatement.setObject(1, ID);
       var resultSet = preparedStatement.executeQuery();
-
       List<Object> values = new ArrayList<>(columnTypes.size());
       if (resultSet.next()) {
         for (int i = 0; i < entityFields.size(); i++) {
@@ -76,34 +85,101 @@ public class Orm {
           values.add(value);
         }
       }
-
       //try to get a matching constructor - else use no args const and reflection
       try {
         Constructor<T> allArgsConstructor = tryToGetAllArgsConstructor(entity, columnTypes);
         if (allArgsConstructor != null) {
           allArgsConstructor.setAccessible(true);
-          var newInstance = allArgsConstructor.newInstance(values.toArray());
-          cache.put(cacheKeyWrapper, newInstance);
-          return newInstance;
-        }
-
-        Constructor<?> noArgsConstructor = tryToGetNoArgsConstructor(entity);
-        if (noArgsConstructor != null) {
-          noArgsConstructor.setAccessible(true);
-          T o = (T) noArgsConstructor.newInstance();
-          for (int i = 0; i < values.size(); i++) {
-            entityFields.get(i).setValue(o, values.get(i));
+          o = allArgsConstructor.newInstance(values.toArray());
+        } else {
+          Constructor<?> noArgsConstructor = tryToGetNoArgsConstructor(entity);
+          if (noArgsConstructor != null) {
+            noArgsConstructor.setAccessible(true);
+            T obj = (T) noArgsConstructor.newInstance();
+            for (int i = 0; i < values.size(); i++) {
+              entityFields.get(i).setValue(obj, values.get(i));
+            }
+            o = obj;
           }
-          cache.put(cacheKeyWrapper, o);
-          return o;
         }
-
-        throw new RuntimeException("Could not unwrap db object");
+        if (o == null) {
+          throw new RuntimeException("Error creating object from DB, try declaring a no Args constructor in class " + clazz.getSimpleName());
+        }
       } catch (Exception e) {
         log.error("Error calling constructor", e);
         throw new RuntimeException("Could fetch db object");
       }
     }
+    cache.put(cacheKeyWrapper, (T) o);
+    fillForeignFields(o, entity);
+    return (T) o;
+  }
+
+  private void fillForeignFields(Object o, Entity entity) {
+    entity.getForeignKeys().forEach(foreignField -> {
+      if (foreignField.isCollection()) {
+        Object fields = getCollectionByFk(foreignField.getRawType(), entity.getType(), entity.getPrimaryKey().getValue(o));
+        foreignField.setValue(o, fields);
+      }
+    });
+  }
+
+  private Object getCollectionByFk(Class<?> rawType, Class<?> entityType, Object primaryKey) {
+
+    var cacheKey = new ForeignCacheKeyWrapper(rawType, entityType, primaryKey);
+    var cachedObj = foreigKeyCache.get(cacheKey);
+    if (cachedObj != null) {
+      return cachedObj;
+    }
+
+    Entity entity = Entity.ofClass(rawType);
+    var fkTableName = entity.getEntityFields()
+      .stream()
+      .filter(entityField -> entityField.getType().equals(entityType))
+      .map(EntityField::getName)
+      .findFirst().orElseThrow();
+
+    var selectStatement = simpleSelectAllInternalFields(entity) + " where " + fkTableName + " = ?";
+    var retrieveCollection = retrieveCollection(selectStatement, entity, primaryKey);
+    foreigKeyCache.put(cacheKey, retrieveCollection);
+    return retrieveCollection;
+  }
+
+  private Object retrieveCollection(String selectStatement, Entity entity, Object primaryKey) {
+    try (
+      var connection = connectionFactory.get();
+      var preparedStatement = connection.prepareStatement(selectStatement)
+    ) {
+      List<Object> objects = new ArrayList<>();
+      var entityFields = entity.getEntityFields().stream().filter(not(EntityField::isFK)).toList();
+      preparedStatement.setObject(1, primaryKey);
+      var resultSet = preparedStatement.executeQuery();
+      Constructor<?> noArgsConstructor = tryToGetNoArgsConstructor(entity);
+      Objects.requireNonNull(noArgsConstructor).setAccessible(true);
+      while (resultSet.next()) {
+        Object o = noArgsConstructor.newInstance();
+        for (int i = 0; i < entityFields.size(); i++) {
+          entityFields.get(i).setValue(o, resultSet.getObject(i+1));
+        }
+        objects.add(o);
+      }
+      return objects;
+    } catch (Exception e) {
+      throw new RuntimeException("Error getting Collection ", e);
+    }
+  }
+
+  private static String simpleSelectAllInternalFields(Entity entity) {
+    var columnNames = entity.getEntityFields()
+      .stream()
+      .filter(not(EntityField::isFK))
+      .map(EntityField::getName)
+      .collect(Collectors.joining(", "));
+    Map<String, String> substituteValues = new HashMap<>();
+    substituteValues.put("tableName", entity.getTableName());
+    substituteValues.put("columNames", columnNames);
+    StringSubstitutor stringSubstitutor = new StringSubstitutor(substituteValues);
+    return stringSubstitutor.replace(SIMPLE_SELECT_INTERNAL);
   }
 
   private void saveIgnoringFK(Object o, List<Class<?>> classes) {
