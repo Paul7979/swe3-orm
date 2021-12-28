@@ -44,7 +44,7 @@ public class Entity {
 
   private Entity (Class<?> type) {
     this.type = type;
-    var entityAnnotation = type.getAnnotation(Enitity.class);
+    var entityAnnotation = type.getAnnotation(at.technikum.orm.annotations.Entity.class);
     if (entityAnnotation == null) {
       throw new MissingAnnotationException(type.getSimpleName() +" is not an @Entity");
     }
@@ -58,8 +58,10 @@ public class Entity {
       if (ignore != null || Modifier.isStatic(field.getModifiers())) {
         return;
       }
+
       var primaryKeyAnnotation = field.getAnnotation(PrimaryKey.class);
       var foreignKey = field.getAnnotation(ForeignKey.class);
+      var manyToMany = field.getAnnotation(ManyToMany.class);
       var columnAnnotation = field.getAnnotation(Column.class);
       var newEntity = new EntityField(field, columnAnnotation);
       if (primaryKeyAnnotation != null) {
@@ -68,7 +70,6 @@ public class Entity {
       }
       if (foreignKey != null) {
         newEntity.setFK(true);
-        newEntity.setJoining(foreignKey.joining());
         if (isNotBlank(foreignKey.columnName())) {
           newEntity.setName(foreignKey.columnName());
         }

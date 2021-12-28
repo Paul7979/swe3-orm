@@ -1,9 +1,6 @@
 package at.technikum.orm;
 
-import at.technikum.orm.cache.Cache;
-import at.technikum.orm.cache.CacheKeyWrapper;
-import at.technikum.orm.cache.ForeignCacheKeyWrapper;
-import at.technikum.orm.cache.InMemoryCache;
+import at.technikum.orm.cache.*;
 import at.technikum.orm.model.Entity;
 import at.technikum.orm.model.EntityField;
 import lombok.extern.slf4j.Slf4j;
@@ -37,22 +34,24 @@ public class Orm {
 
   private final ConnectionFactory connectionFactory;
   private final Cache<CacheKeyWrapper, Object> cache;
-  private final Cache<ForeignCacheKeyWrapper, Object> foreigKeyCache;
+  private final Cache<ForeignCacheKeyWrapper, Object> foreignKeyCache;
 
   public Orm(String url) throws SQLException {
     connectionFactory =  ConnectionFactory.of(url);
     cache = new InMemoryCache<>();
-    foreigKeyCache = new InMemoryCache<>();
+    foreignKeyCache = new NoOpCache<>();
+    //foreignKeyCache = new InMemoryCache<>();
   }
 
   public <T>T get(Class<T> clazz, Object ID) throws SQLException {
     var cacheKeyWrapper = new CacheKeyWrapper(clazz, ID);
     var cachedObject = cache.get(cacheKeyWrapper);
+    var entity = Entity.ofClass(clazz);
     if (cachedObject != null) {
       log.info("Hit Cache on class {} with id {}", clazz.getSimpleName(), ID);
+      fillForeignFields(cachedObject, entity);
       return (T) cachedObject;
     }
-    var entity = Entity.ofClass(clazz);
     var entityFields = entity.getEntityFields().stream()
       .filter(not(EntityField::isFK))
       .toList();
@@ -127,7 +126,7 @@ public class Orm {
   private Object getCollectionByFk(Class<?> rawType, Class<?> entityType, Object primaryKey) {
 
     var cacheKey = new ForeignCacheKeyWrapper(rawType, entityType, primaryKey);
-    var cachedObj = foreigKeyCache.get(cacheKey);
+    var cachedObj = foreignKeyCache.get(cacheKey);
     if (cachedObj != null) {
       return cachedObj;
     }
@@ -141,7 +140,7 @@ public class Orm {
 
     var selectStatement = simpleSelectAllInternalFields(entity) + " where " + fkTableName + " = ?";
     var retrieveCollection = retrieveCollection(selectStatement, entity, primaryKey);
-    foreigKeyCache.put(cacheKey, retrieveCollection);
+    foreignKeyCache.put(cacheKey, retrieveCollection);
     return retrieveCollection;
   }
 
@@ -204,9 +203,6 @@ public class Orm {
             return;
           }
           saveIgnoringFK(fkToStore, classes);
-        }
-        if (entityField.isJoining()){
-          return;
         }
         columnNames.add(entityField.getName());
         columnNamesWithoutPK.add(entityField.getName());

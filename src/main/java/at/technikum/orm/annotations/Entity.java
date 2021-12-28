@@ -4,6 +4,6 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 
 @Retention(value = RetentionPolicy.RUNTIME)
-public @interface Enitity {
+public @interface Entity {
   String tableName() default "";
 }

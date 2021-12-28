@@ -27,8 +27,6 @@ public class EntityField {
 
   private Class<?> rawType;
 
-  private boolean joining = false;
-
   private Field field;
 
   private boolean isPK;
@@ -52,20 +50,6 @@ public class EntityField {
       rawType = (Class<?>) parameterizedType.getActualTypeArguments()[0]; // extracts eg. String from List<String>
     } else {
       this.type = field.getType();
-    }
-  }
-
-  public EntityField(Field field, Column columnAnnotation, PrimaryKey primaryKey) {
-    this(field, columnAnnotation);
-    if (primaryKey != null) {
-      isPK = true;
-    }
-  }
-
-  public EntityField(Field field, Column columnAnnotation, ForeignKey foreignKey) {
-    this(field, columnAnnotation);
-    if (foreignKey != null) {
-      isPK = true;
     }
   }
 

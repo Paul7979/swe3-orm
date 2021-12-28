@@ -24,20 +24,20 @@ public class App
       Orm orm = getOrm();
 
       storeTeacher0(orm);
-
-      fetchTeacher1(orm);
+      var t0 = orm.get(Teacher.class, TEACHER0_ID);
+      log.info("Fetched teacher 0: {}", t0);
       saveClassWithTeacher1ToN(orm);
-      var sClass2 = sClass2(teacher(TEACHER1_ID));
+      var t1 = orm.get(Teacher.class, TEACHER1_ID);
+      log.info("Fetched teacher 1: {}", t1);
+
+      var sClass2 = sClass2(teacher(TEACHER2_ID));
       orm.save(sClass2);
-
-      storeTeacherWithClasses1ToN(orm);
-
-      var teacher2 = orm.get(Teacher.class, TEACHER2_ID);
-
+      var t2 = orm.get(Teacher.class, TEACHER2_ID);
+      log.info("Fetched teacher 2: {}", t2);
     }
 
   private static void saveClassWithTeacher1ToN(Orm orm) throws SQLException {
-    var sClass1 = sClass1(teacher(TEACHER2_ID));
+    var sClass1 = sClass1(teacher(TEACHER1_ID));
     orm.save(sClass1);
   }
 
@@ -63,6 +63,17 @@ public class App
         log.info("Fetched Teacher {} {}", teacher.getFirstName(), teacher.getName());
     } catch (SQLException e) {
         log.error("Could not fetch teacher", e);
+    }
+  }
+
+  private static Teacher fetchTeacher(Orm orm, String teacherId) {
+    try {
+      var teacher = orm.get(Teacher.class, teacherId);
+      log.info("Fetched Teacher {} {}", teacher.getFirstName(), teacher.getName());
+      return teacher;
+    } catch (SQLException e) {
+      log.error("Could not fetch teacher", e);
+      throw new RuntimeException(e);
     }
   }
 

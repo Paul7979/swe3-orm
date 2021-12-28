@@ -1,15 +1,17 @@
 package at.technikum.demo.model.school;
 
-import at.technikum.orm.annotations.Enitity;
+import at.technikum.orm.annotations.Entity;
 import at.technikum.orm.annotations.ForeignKey;
 import at.technikum.orm.annotations.PrimaryKey;
 import lombok.Getter;
 import lombok.Setter;
+import lombok.ToString;
 
 
-@Enitity(tableName = "class")
+@Entity(tableName = "class")
 @Getter
 @Setter
+@ToString
 public class SClass 
 {
 

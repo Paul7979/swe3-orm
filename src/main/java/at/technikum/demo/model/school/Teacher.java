@@ -1,18 +1,19 @@
 package at.technikum.demo.model.school;
 
-import at.technikum.orm.annotations.Enitity;
+import at.technikum.orm.annotations.Entity;
 import at.technikum.orm.annotations.ForeignKey;
-import at.technikum.orm.annotations.Ignore;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import lombok.ToString;
 
 import java.time.LocalDate;
 import java.util.List;
 
-@Enitity(tableName = "teachers")
+@Entity(tableName = "teachers")
 @Setter
 @Getter
+@ToString
 @NoArgsConstructor
 public class Teacher extends Person {
 
