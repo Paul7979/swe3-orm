@@ -1,8 +1,6 @@
 package at.technikum.orm.model;
 
 import at.technikum.orm.annotations.Column;
-import at.technikum.orm.annotations.ForeignKey;
-import at.technikum.orm.annotations.PrimaryKey;
 import at.technikum.orm.exceptions.ReflectiveAccesException;
 import lombok.Getter;
 import lombok.Setter;
@@ -21,7 +19,7 @@ import static org.apache.commons.lang3.StringUtils.isNotBlank;
 @Slf4j
 public class EntityField {
 
-  private String name;
+  private String columnName;
 
   private Class<?> type;
 
@@ -33,14 +31,18 @@ public class EntityField {
 
   private boolean isFK;
 
+  private boolean isManyToMany;
+
+  private ManyToManyRelation manyToManyRelation;
+
   private boolean isCollection;
 
   public EntityField(Field field, Column columnAnnotation) {
     this.field = field;
     if (columnAnnotation != null && isNotBlank(columnAnnotation.name())) {
-      name = columnAnnotation.name();
+      columnName = columnAnnotation.name();
     } else {
-      name = field.getName();
+      columnName = field.getName();
     }
     if (field.getGenericType() instanceof ParameterizedType parameterizedType) {
       if (Collection.class.isAssignableFrom((Class<?>) parameterizedType.getRawType())) {
@@ -76,9 +78,6 @@ public class EntityField {
       return value.toString();
     }
     if (isFK) {
-      if (rawType != null) {
-
-      }
       var fkType = Entity.ofClass(type).getPrimaryKey();
       return fkType.toDbObject(value);
     }

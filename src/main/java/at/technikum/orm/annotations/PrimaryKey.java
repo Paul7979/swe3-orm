@@ -5,5 +5,5 @@ import java.lang.annotation.RetentionPolicy;
 
 @Retention(value = RetentionPolicy.RUNTIME)
 public @interface PrimaryKey {
-  String columnName = "";
+  String columnName() default "";
 }

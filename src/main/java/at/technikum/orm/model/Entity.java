@@ -13,6 +13,7 @@ import java.util.function.Function;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
+import static org.apache.commons.lang3.StringUtils.defaultIfBlank;
 import static org.apache.commons.lang3.StringUtils.isNotBlank;
 
 @Getter
@@ -25,28 +26,14 @@ public class Entity {
   private final List<EntityField> entityFields = new ArrayList<>();
   private final List<EntityField> foreignKeys = new ArrayList<>();
   private final Class<?> type;
-  private EntityField primaryKey;
   private final String tableName;
+  private EntityField primaryKey;
 
-  public static Entity ofClass(Class<?> clazz) {
-    if (entityCache.containsKey(clazz)) {
-      log.info("Entity Cache hit on class {}", clazz.getSimpleName());
-      return entityCache.get(clazz);
-    }
-    var entity = new Entity(clazz);
-    entityCache.put(clazz, entity);
-    return entity;
-  }
-
-  public static Entity ofObject(Object o) {
-    return ofClass(o.getClass());
-  }
-
-  private Entity (Class<?> type) {
+  private Entity(Class<?> type) {
     this.type = type;
     var entityAnnotation = type.getAnnotation(at.technikum.orm.annotations.Entity.class);
     if (entityAnnotation == null) {
-      throw new MissingAnnotationException(type.getSimpleName() +" is not an @Entity");
+      throw new MissingAnnotationException(type.getSimpleName() + " is not an @Entity");
     }
     if (isNotBlank(entityAnnotation.tableName())) {
       tableName = entityAnnotation.tableName();
@@ -66,29 +53,52 @@ public class Entity {
       var newEntity = new EntityField(field, columnAnnotation);
       if (primaryKeyAnnotation != null) {
         newEntity.setPK(true);
+        if (isNotBlank(primaryKeyAnnotation.columnName())) {
+          newEntity.setColumnName(primaryKeyAnnotation.columnName());
+        }
         primaryKey = newEntity;
       }
       if (foreignKey != null) {
         newEntity.setFK(true);
         if (isNotBlank(foreignKey.columnName())) {
-          newEntity.setName(foreignKey.columnName());
+          newEntity.setColumnName(foreignKey.columnName());
         }
         foreignKeys.add(newEntity);
       }
+      if (manyToMany != null) {
+        newEntity.setManyToMany(true);
+        ManyToManyRelation relation = new ManyToManyRelation();
+        relation.setReferenceTableName(defaultIfBlank(manyToMany.referenceTableName(), type.getSimpleName() + "_" + field.getName()));
+        relation.setReferencedColumnName(defaultIfBlank(manyToMany.referencedColumnName(), "fk_" + type.getSimpleName().toLowerCase()));
+        newEntity.setManyToManyRelation(relation);
+      }
       entityFields.add(newEntity);
     });
-
   }
 
-  private Stream<Field> allFieldsFor(Class<?> c ) {
-    return walkInheritanceTreeFor(c).flatMap( k -> Arrays.stream(k.getDeclaredFields()) );
+  public static Entity ofClass(Class<?> clazz) {
+    if (entityCache.containsKey(clazz)) {
+      log.info("Entity Cache hit on class {}", clazz.getSimpleName());
+      return entityCache.get(clazz);
+    }
+    var entity = new Entity(clazz);
+    entityCache.put(clazz, entity);
+    return entity;
   }
 
-  private Stream<Class<?>> walkInheritanceTreeFor(Class<?> c ) {
+  public static Entity ofObject(Object o) {
+    return ofClass(o.getClass());
+  }
+
+  private Stream<Field> allFieldsFor(Class<?> c) {
+    return walkInheritanceTreeFor(c).flatMap(k -> Arrays.stream(k.getDeclaredFields()));
+  }
+
+  private Stream<Class<?>> walkInheritanceTreeFor(Class<?> c) {
     return iterate(c, k -> Optional.ofNullable(k.getSuperclass()));
   }
 
-  private <T> Stream<T> iterate( T seed, Function<T,Optional<T>> fetchNextFunction ) {
+  private <T> Stream<T> iterate(T seed, Function<T, Optional<T>> fetchNextFunction) {
     Objects.requireNonNull(fetchNextFunction);
 
     Iterator<T> iterator = new Iterator<T>() {
@@ -108,9 +118,8 @@ public class Entity {
     };
 
     return StreamSupport.stream(
-      Spliterators.spliteratorUnknownSize( iterator, Spliterator.ORDERED | Spliterator.IMMUTABLE),
+      Spliterators.spliteratorUnknownSize(iterator, Spliterator.ORDERED | Spliterator.IMMUTABLE),
       false
     );
   }
-
 }

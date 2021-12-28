@@ -10,5 +10,4 @@ public class CacheKeyWrapper {
 
   private Class<?> clazz;
   private Object objectID;
-
 }

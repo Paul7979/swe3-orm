@@ -10,5 +10,4 @@ public class ForeignCacheKeyWrapper {
   private Class<?> fkType;
   private Class<?> entityType;
   private Object objectID;
-
 }

@@ -9,7 +9,7 @@ import java.util.Map;
 import java.util.concurrent.*;
 
 @Slf4j
-public class InMemoryCache<K, V> implements Cache<K,V> {
+public class InMemoryCache<K, V> implements Cache<K, V> {
 
   private Map<K, V> cache;
 

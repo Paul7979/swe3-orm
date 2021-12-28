@@ -3,6 +3,7 @@ package at.technikum.orm;
 import at.technikum.orm.cache.*;
 import at.technikum.orm.model.Entity;
 import at.technikum.orm.model.EntityField;
+import at.technikum.orm.model.ManyToManyRelation;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.text.StringSubstitutor;
 
@@ -16,7 +17,7 @@ import static java.util.function.Predicate.not;
 @Slf4j
 public class Orm {
 
-  private static final String INSERT_TEMPLATE = """
+  private static final String UPSERT_TEMPLATE = """
     INSERT INTO ${tableName} (${columNames})
     VALUES (${valuePlaceholder})
     ON CONFLICT (${pkColumnName}) DO UPDATE SET ${columnsWithoutPKWithPlaceholder}""";
@@ -37,13 +38,27 @@ public class Orm {
   private final Cache<ForeignCacheKeyWrapper, Object> foreignKeyCache;
 
   public Orm(String url) throws SQLException {
-    connectionFactory =  ConnectionFactory.of(url);
+    connectionFactory = ConnectionFactory.of(url);
     cache = new InMemoryCache<>();
     foreignKeyCache = new NoOpCache<>();
     //foreignKeyCache = new InMemoryCache<>();
   }
 
-  public <T>T get(Class<T> clazz, Object ID) throws SQLException {
+  private static String simpleSelectAllInternalFields(Entity entity) {
+    var columnNames = entity.getEntityFields()
+      .stream()
+      .filter(not(EntityField::isFK))
+      .filter(not(EntityField::isManyToMany))
+      .map(EntityField::getColumnName)
+      .collect(Collectors.joining(", "));
+    Map<String, String> substituteValues = new HashMap<>();
+    substituteValues.put("tableName", entity.getTableName());
+    substituteValues.put("columNames", columnNames);
+    StringSubstitutor stringSubstitutor = new StringSubstitutor(substituteValues);
+    return stringSubstitutor.replace(SIMPLE_SELECT_INTERNAL);
+  }
+
+  public <T> T get(Class<T> clazz, Object ID) throws SQLException {
     var cacheKeyWrapper = new CacheKeyWrapper(clazz, ID);
     var cachedObject = cache.get(cacheKeyWrapper);
     var entity = Entity.ofClass(clazz);
@@ -54,9 +69,10 @@ public class Orm {
     }
     var entityFields = entity.getEntityFields().stream()
       .filter(not(EntityField::isFK))
+      .filter(not(EntityField::isManyToMany))
       .toList();
     var columnNames = entityFields.stream()
-      .map(EntityField::getName).collect(Collectors.joining(", "));
+      .map(EntityField::getColumnName).collect(Collectors.joining(", "));
     var columnTypes = entityFields.stream()
       .map(EntityField::getType)
       .toList();
@@ -64,7 +80,7 @@ public class Orm {
     Map<String, String> substituteValues = new HashMap<>();
     substituteValues.put("tableName", entity.getTableName());
     substituteValues.put("columNames", columnNames);
-    substituteValues.put("pkColumnName", entity.getPrimaryKey().getName());
+    substituteValues.put("pkColumnName", entity.getPrimaryKey().getColumnName());
 
     StringSubstitutor stringSubstitutor = new StringSubstitutor(substituteValues);
     var selectStatement = stringSubstitutor.replace(SELECT_TEMPLATE);
@@ -80,7 +96,7 @@ public class Orm {
       if (resultSet.next()) {
         for (int i = 0; i < entityFields.size(); i++) {
           var entityField = entityFields.get(i);
-          var value = entityField.fromDbObject(resultSet.getObject(i+1));
+          var value = entityField.fromDbObject(resultSet.getObject(i + 1));
           values.add(value);
         }
       }
@@ -135,7 +151,7 @@ public class Orm {
     var fkTableName = entity.getEntityFields()
       .stream()
       .filter(entityField -> entityField.getType().equals(entityType))
-      .map(EntityField::getName)
+      .map(EntityField::getColumnName)
       .findFirst().orElseThrow();
 
     var selectStatement = simpleSelectAllInternalFields(entity) + " where " + fkTableName + " = ?";
@@ -149,8 +165,9 @@ public class Orm {
       var connection = connectionFactory.get();
       var preparedStatement = connection.prepareStatement(selectStatement)
     ) {
+      log.info(selectStatement);
       List<Object> objects = new ArrayList<>();
-      var entityFields = entity.getEntityFields().stream().filter(not(EntityField::isFK)).toList();
+      var entityFields = entity.getEntityFields().stream().filter(not(EntityField::isFK)).filter(not(EntityField::isManyToMany)).toList();
       preparedStatement.setObject(1, primaryKey);
       var resultSet = preparedStatement.executeQuery();
       Constructor<?> noArgsConstructor = tryToGetNoArgsConstructor(entity);
@@ -158,7 +175,7 @@ public class Orm {
       while (resultSet.next()) {
         Object o = noArgsConstructor.newInstance();
         for (int i = 0; i < entityFields.size(); i++) {
-          entityFields.get(i).setValue(o, resultSet.getObject(i+1));
+          entityFields.get(i).setValue(o, resultSet.getObject(i + 1));
         }
         objects.add(o);
       }
@@ -168,20 +185,7 @@ public class Orm {
     }
   }
 
-  private static String simpleSelectAllInternalFields(Entity entity) {
-    var columnNames = entity.getEntityFields()
-      .stream()
-      .filter(not(EntityField::isFK))
-      .map(EntityField::getName)
-      .collect(Collectors.joining(", "));
-    Map<String, String> substituteValues = new HashMap<>();
-    substituteValues.put("tableName", entity.getTableName());
-    substituteValues.put("columNames", columnNames);
-    StringSubstitutor stringSubstitutor = new StringSubstitutor(substituteValues);
-    return stringSubstitutor.replace(SIMPLE_SELECT_INTERNAL);
-  }
-
-  private void saveIgnoringFK(Object o, List<Class<?>> classes) {
+  private void saveIgnoringClasses(Object o, List<Class<?>> classes) {
 
     Entity entity = Entity.ofClass(o.getClass());
 
@@ -191,6 +195,13 @@ public class Orm {
     List<Object> valuesWithoutPK = new ArrayList<>();
 
     entity.getEntityFields().forEach(entityField -> {
+      if (entityField.isManyToMany()) {
+        if (classes.contains(entityField.getType()) || classes.contains(entityField.getRawType())) {
+          return;
+        }
+        saveManyToMany(o, entityField, entity);
+        return;
+      }
       if (entityField.isFK()) {
         var fkToStore = entityField.getValue(o);
         if (fkToStore == null) {
@@ -199,22 +210,22 @@ public class Orm {
         if (!classes.contains(entityField.getType()) && !classes.contains(entityField.getRawType())) {
           classes.add(o.getClass());
           if (entityField.isCollection() && fkToStore instanceof Collection<?> collection) {
-            collection.forEach(objToStore -> saveIgnoringFK(objToStore, classes));
+            collection.forEach(objToStore -> saveIgnoringClasses(objToStore, classes));
             return;
           }
-          saveIgnoringFK(fkToStore, classes);
+          saveIgnoringClasses(fkToStore, classes);
         }
-        columnNames.add(entityField.getName());
-        columnNamesWithoutPK.add(entityField.getName());
+        columnNames.add(entityField.getColumnName());
+        columnNamesWithoutPK.add(entityField.getColumnName());
         var value = Entity.ofClass(entityField.getType()).getPrimaryKey().getValue(fkToStore);
         valuesWithoutPK.add(value);
         values.add(value);
         return;
       }
-      columnNames.add(entityField.getName());
+      columnNames.add(entityField.getColumnName());
       var object = entityField.toDbObject(entityField.getValue(o));
       if (!entityField.isPK()) {
-        columnNamesWithoutPK.add(entityField.getName());
+        columnNamesWithoutPK.add(entityField.getColumnName());
         valuesWithoutPK.add(object);
       }
       values.add(object);
@@ -222,7 +233,7 @@ public class Orm {
 
     Map<String, String> substituteValues = new HashMap<>();
     substituteValues.put("tableName", entity.getTableName());
-    substituteValues.put("pkColumnName", entity.getPrimaryKey().getName());
+    substituteValues.put("pkColumnName", entity.getPrimaryKey().getColumnName());
     substituteValues.put("columNames", String.join(", ", columnNames));
     substituteValues.put("valuePlaceholder", createPlaceholders(columnNames));
     substituteValues.put("columnsWithoutPKWithPlaceholder", createColumnNamesWithPlaceholders(columnNamesWithoutPK));
@@ -230,14 +241,14 @@ public class Orm {
     StringSubstitutor stringSubstitutor = new StringSubstitutor(substituteValues);
 
     values.addAll(valuesWithoutPK);
-    var insertStatement = stringSubstitutor.replace(INSERT_TEMPLATE);
+    var insertStatement = stringSubstitutor.replace(UPSERT_TEMPLATE);
     log.info(insertStatement);
     try (
       var connection = connectionFactory.get();
       var preparedStatement = connection.prepareStatement(insertStatement)
     ) {
       for (int i = 0; i < values.size(); i++) {
-        preparedStatement.setObject(i+1, values.get(i));
+        preparedStatement.setObject(i + 1, values.get(i));
       }
       preparedStatement.execute();
       var primaryKey = entity.getPrimaryKey().getValue(o);
@@ -248,8 +259,64 @@ public class Orm {
     }
   }
 
+  private void saveManyToMany(Object o, EntityField entityField, Entity entity) {
+    var entityFieldValue = entityField.getValue(o);
+    if (entityFieldValue == null) {
+      return;
+    }
+    if (entityFieldValue instanceof Collection<?> entityFieldValues) {
+      final List<Class<?>> classes = new ArrayList<>();
+      classes.add(entity.getType());
+      if (entityFieldValues.isEmpty()) {
+        return;
+      }
+      Entity foreignEntity = Entity.ofClass(entityField.getRawType() == null ? entityField.getType() : entityField.getRawType());
+      var tableName = entityField.getManyToManyRelation().getReferenceTableName();
+      var referencedColumnName = entityField.getManyToManyRelation().getReferencedColumnName();
+      var foreignPrimaryKeyEntity = foreignEntity.getPrimaryKey();
+      var foreignReferencedColumnName = getForeignReferencedColumnName(foreignEntity, entity.getType());
+
+      Map<String, String> defaultValues = new HashMap<>();
+      defaultValues.put("tableName", tableName);
+      defaultValues.put("columNames", referencedColumnName + ", " + foreignReferencedColumnName);
+      defaultValues.put("valuePlaceholder", "?, ?");
+      String insert_template = """
+        INSERT INTO ${tableName} (${columNames})
+        VALUES (${valuePlaceholder})""";
+      var stringSubstitutor = new StringSubstitutor(defaultValues);
+      var insertStatement = stringSubstitutor.replace(insert_template);
+
+      var pkValue = entity.getPrimaryKey().toDbObject(entity.getPrimaryKey().getValue(o));
+      ((Collection<?>) entityFieldValue).forEach(value -> {
+        saveIgnoringClasses(value, classes);
+        insertManyToMany(insertStatement, pkValue, foreignPrimaryKeyEntity.toDbObject(foreignPrimaryKeyEntity.getValue(value)));
+      });
+    }
+  }
+
+  private String  getForeignReferencedColumnName(Entity foreignEntity, Class<?> type) {
+    return foreignEntity.getEntityFields().stream()
+      .filter(EntityField::isManyToMany)
+      .filter(entityField -> type.equals(entityField.getRawType()) || type.equals(entityField.getType()))
+      .findFirst().map(EntityField::getManyToManyRelation).map(ManyToManyRelation::getReferencedColumnName).orElseThrow();
+  }
+
+  private void insertManyToMany(String insertStatement, Object pkValue, Object foreignPkValue) {
+    try (
+      var connection = connectionFactory.get();
+      var preparedStatement = connection.prepareStatement(insertStatement)
+    ) {
+      log.info(insertStatement);
+      preparedStatement.setObject(1, pkValue);
+      preparedStatement.setObject(2, foreignPkValue);
+      preparedStatement.execute();
+    } catch (SQLException e) {
+      throw new RuntimeException("Failed to store", e);
+    }
+  }
+
   public void save(Object o) throws SQLException {
-    saveIgnoringFK(o, new ArrayList<>());
+    saveIgnoringClasses(o, new ArrayList<>());
   }
 
   private <T> Constructor<T> tryToGetNoArgsConstructor(Entity entity) {

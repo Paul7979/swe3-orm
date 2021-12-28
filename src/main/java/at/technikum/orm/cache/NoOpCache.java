@@ -12,7 +12,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 @Slf4j
-public class NoOpCache<K, V> implements Cache<K,V> {
+public class NoOpCache<K, V> implements Cache<K, V> {
 
   public NoOpCache() {
   }

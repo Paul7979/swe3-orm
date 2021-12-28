@@ -13,32 +13,31 @@ import java.util.List;
 @Entity(tableName = "teachers")
 @Setter
 @Getter
-@ToString
+@ToString(callSuper = true)
 @NoArgsConstructor
 public class Teacher extends Person {
 
-    private int salary;
-    
-    private LocalDate hireDate;
+  private int salary;
 
-    @ForeignKey()
-    private List<SClass> classes;
+  private LocalDate hireDate;
 
-    @ForeignKey()
-    private List<Course> courses;
+  @ForeignKey()
+  private List<SClass> classes;
 
-    public Teacher(String id, String name, String firstName, LocalDate birthDate, Gender gender, int salary, LocalDate hireDate, List<SClass> classes, List<Course> courses) {
-        super(id, name, firstName, birthDate, gender);
-        this.salary = salary;
-        this.hireDate = hireDate;
-        this.classes = classes;
-        this.courses = courses;
-    }
+  @ForeignKey()
+  private List<Course> courses;
 
-    public Teacher(int salary, LocalDate hireDate, String id, String name,  String firstName, LocalDate birthDate, Gender gender) {
-        super(id, name, firstName, birthDate, gender);
-        this.salary = salary;
-        this.hireDate = hireDate;
-    }
+  public Teacher(String id, String name, String firstName, LocalDate birthDate, Gender gender, int salary, LocalDate hireDate, List<SClass> classes, List<Course> courses) {
+    super(id, name, firstName, birthDate, gender);
+    this.salary = salary;
+    this.hireDate = hireDate;
+    this.classes = classes;
+    this.courses = courses;
+  }
 
+  public Teacher(int salary, LocalDate hireDate, String id, String name, String firstName, LocalDate birthDate, Gender gender) {
+    super(id, name, firstName, birthDate, gender);
+    this.salary = salary;
+    this.hireDate = hireDate;
+  }
 }
