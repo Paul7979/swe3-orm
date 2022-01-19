@@ -16,6 +16,8 @@ import java.util.concurrent.ThreadLocalRandom;
 @Slf4j
 public class App {
 
+  public static final String line = "-----------------------------------------------------------------------------------------------";
+
   public static final String TEACHER0_ID = "t_0";
   public static final String TEACHER1_ID = "t_1";
   public static final String TEACHER2_ID = "t_2";
@@ -35,10 +37,12 @@ public class App {
     orm.save(sClass2);
     var t2 = orm.get(Teacher.class, TEACHER2_ID);
     log.info("Fetched teacher 2: {}", t2);
-    sampleMToN(orm);
   }
 
   private static void sampleMToN(Orm orm) throws SQLException {
+    log.info(line);
+    log.info("Starting m to n example");
+
     var student1Id = "student_1";
     var student2Id = "student_2";
 
@@ -51,11 +55,18 @@ public class App {
     orm.save(teacher1);
     var classId1 = "a_class_1";
     var aClass1 = sClassId(teacher1, classId1);
-    orm.save(aClass1);
     aClass1.setStudents(List.of(student1, student2));
     orm.save(aClass1);
+    var classId2 = "a_class_2";
+    var aClass2 = sClassId(teacher1, classId2);
+    aClass2.setStudents(List.of(student1, student2));
+    orm.save(aClass2);
     var getStudent1 = orm.get(Student.class, student1Id);
-    log.info("Got Student {}", getStudent1);
+
+    log.info("Got Student1 with classes {}", getStudent1.getSClass());
+
+    var getClass2 = orm.get(SClass.class, classId2);
+    log.info("Got SClass2 with Students {}", getClass2.getStudents());
   }
 
   private static void testMToN(Orm orm) throws SQLException {

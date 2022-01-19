@@ -141,11 +141,17 @@ public class Orm {
         if (entityField.getRawType() == null) {
           throw new RuntimeException("Many to Many must be collection");
         }
-        Object collection = getCollectionByManyToMany(entityField.getManyToManyRelation(), entityField.getRawType(), entity, o);
+        var collection = getCollectionByManyToMany(entityField.getManyToManyRelation(), entityField.getRawType(), entity, o);
+        entityField.getField().setAccessible(true);
+        try {
+          entityField.getField().set(o, collection);
+        } catch (IllegalAccessException e) {
+          throw new RuntimeException("Exception in many to many", e);
+        }
       });
   }
 
-  private Object getCollectionByManyToMany(ManyToManyRelation manyToManyRelation, Class<?> rawType, Entity entity, Object o) {
+  private Collection<Object> getCollectionByManyToMany(ManyToManyRelation manyToManyRelation, Class<?> rawType, Entity entity, Object o) {
     Entity foreign = Entity.ofClass(rawType);
     Object primaryKey = null;
     try {
@@ -157,7 +163,37 @@ public class Orm {
     }
     var foreignForeignKey = foreign.getEntityFields().stream().filter(EntityField::isManyToMany).filter(entityField -> entityField.getRawType().equals(entity.getType())).findFirst().orElseThrow();
     Collection<Object> foreignKeys = getForeignFieldsMtoN(manyToManyRelation, primaryKey, foreignForeignKey);
+    var selectStatement = simpleSelectAllInternalFields(foreign) + " where " + foreign.getPrimaryKey().getColumnName() + " = ?";
+    var objects = foreignKeys.stream().map(key ->
+      this.getByPk(selectStatement, key, foreign)
+    ).toList();
+    return objects;
+  }
 
+  private Object getByPk(String selectStatement, Object key, Entity foreign) {
+
+    try (var connection = connectionFactory.get();
+         var preparedStatement = connection.prepareStatement(selectStatement)
+    ) {
+      log.info(selectStatement);
+      preparedStatement.setObject(1, key);
+      var entityFields = foreign.getEntityFields().stream().filter(not(EntityField::isFK)).filter(not(EntityField::isManyToMany)).toList();
+      Constructor<?> noArgsConstructor = tryToGetNoArgsConstructor(foreign);
+      Objects.requireNonNull(noArgsConstructor).setAccessible(true);
+      var resultSet = preparedStatement.executeQuery();
+      Object o = null;
+      if (resultSet.next()) {
+        o = noArgsConstructor.newInstance();
+        for (int i = 0; i < entityFields.size(); i++) {
+          var entityField = entityFields.get(i);
+          var fromDbObject = entityField.fromDbObject(resultSet.getObject(i + 1));
+          entityField.getField().set(o, fromDbObject);
+        }
+      }
+      return o;
+    } catch (Exception e) {
+      throw new RuntimeException("Error getting Collection ", e);
+    }
   }
 
   private Collection<Object> getForeignFieldsMtoN(ManyToManyRelation manyToManyRelation, Object primaryKey, EntityField foreignForeignKey) {
@@ -169,8 +205,13 @@ public class Orm {
          var preparedStatement = connection.prepareStatement(selectStatement)
     ) {
       log.info(selectStatement);
-
-
+      preparedStatement.setObject(1, primaryKey);
+      var resultSet = preparedStatement.executeQuery();
+      List<Object> objects = new ArrayList<>();
+      while (resultSet.next()) {
+        objects.add(resultSet.getObject(1));
+      }
+      return objects;
     } catch (Exception e) {
       throw new RuntimeException("Error getting Collection ", e);
     }
@@ -226,7 +267,9 @@ public class Orm {
       while (resultSet.next()) {
         Object o = noArgsConstructor.newInstance();
         for (int i = 0; i < entityFields.size(); i++) {
-          entityFields.get(i).setValue(o, resultSet.getObject(i + 1));
+          var entityField = entityFields.get(i);
+          var fromDB = entityField.fromDbObject(resultSet.getObject(i + 1));
+          entityField.setValue(o, fromDB);
         }
         objects.add(o);
       }
