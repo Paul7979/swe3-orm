@@ -64,7 +64,8 @@ public class Orm {
     var entity = Entity.ofClass(clazz);
     if (cachedObject != null) {
       log.info("Hit Cache on class {} with id {}", clazz.getSimpleName(), ID);
-      fillForeignFields(cachedObject, entity);
+      fillSimpleForeignFields(cachedObject, entity);
+      fillMtoNForeignFields(cachedObject, entity);
       return (T) cachedObject;
     }
     var entityFields = entity.getEntityFields().stream()
@@ -126,11 +127,61 @@ public class Orm {
       }
     }
     cache.put(cacheKeyWrapper, (T) o);
-    fillForeignFields(o, entity);
+    fillSimpleForeignFields(o, entity);
+    fillMtoNForeignFields(o, entity);
     return (T) o;
   }
 
-  private void fillForeignFields(Object o, Entity entity) {
+  private void fillMtoNForeignFields(Object o, Entity entity) {
+    var manyToManyEntityFields = entity.getEntityFields()
+      .stream()
+      .filter(EntityField::isManyToMany).toList();
+    manyToManyEntityFields
+      .forEach(entityField -> {
+        if (entityField.getRawType() == null) {
+          throw new RuntimeException("Many to Many must be collection");
+        }
+        Object collection = getCollectionByManyToMany(entityField.getManyToManyRelation(), entityField.getRawType(), entity, o);
+      });
+  }
+
+  private Object getCollectionByManyToMany(ManyToManyRelation manyToManyRelation, Class<?> rawType, Entity entity, Object o) {
+    Entity foreign = Entity.ofClass(rawType);
+    Object primaryKey = null;
+    try {
+      var pkField = entity.getPrimaryKey().getField();
+      pkField.setAccessible(true);
+      primaryKey = pkField.get(o);
+    } catch (IllegalAccessException e) {
+      throw new RuntimeException(e);
+    }
+    var foreignForeignKey = foreign.getEntityFields().stream().filter(EntityField::isManyToMany).filter(entityField -> entityField.getRawType().equals(entity.getType())).findFirst().orElseThrow();
+    Collection<Object> foreignKeys = getForeignFieldsMtoN(manyToManyRelation, primaryKey, foreignForeignKey);
+
+  }
+
+  private Collection<Object> getForeignFieldsMtoN(ManyToManyRelation manyToManyRelation, Object primaryKey, EntityField foreignForeignKey) {
+    var foreignReferencedColumnName = foreignForeignKey.getManyToManyRelation().getReferencedColumnName();
+    String selectStatement = "SELECT " + foreignReferencedColumnName + " from " + manyToManyRelation.getReferenceTableName() +
+      " where " + manyToManyRelation.getReferencedColumnName() + " = ?";
+
+    try (var connection = connectionFactory.get();
+         var preparedStatement = connection.prepareStatement(selectStatement)
+    ) {
+      log.info(selectStatement);
+
+
+    } catch (Exception e) {
+      throw new RuntimeException("Error getting Collection ", e);
+    }
+  }
+
+  /**
+   *
+   * @param o the object on which the foreign fields are set
+   * @param entity the entity of the object
+   */
+  private void fillSimpleForeignFields(Object o, Entity entity) {
     entity.getForeignKeys().forEach(foreignField -> {
       if (foreignField.isCollection()) {
         Object fields = getCollectionByFk(foreignField.getRawType(), entity.getType(), entity.getPrimaryKey().getValue(o));

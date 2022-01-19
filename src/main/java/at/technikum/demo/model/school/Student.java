@@ -8,6 +8,7 @@ import lombok.Setter;
 import lombok.ToString;
 
 import java.time.LocalDate;
+import java.util.List;
 
 @Entity(tableName = "student")
 @Setter
@@ -21,9 +22,9 @@ public class Student extends Person {
   private LocalDate hireDate;
 
   @ManyToMany(referencedColumnName = "fk_student", referenceTableName = "student_courses")
-  private SClass sClass;
+  private List<SClass> sClass;
 
-  public Student(String id, String name, String firstName, LocalDate birthDate, Gender gender, int grade, LocalDate hireDate, SClass sClass) {
+  public Student(String id, String name, String firstName, LocalDate birthDate, Gender gender, int grade, LocalDate hireDate, List<SClass> sClass) {
     super(id, name, firstName, birthDate, gender);
     this.grade = grade;
     this.hireDate = hireDate;

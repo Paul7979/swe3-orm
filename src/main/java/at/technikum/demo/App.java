@@ -35,21 +35,27 @@ public class App {
     orm.save(sClass2);
     var t2 = orm.get(Teacher.class, TEACHER2_ID);
     log.info("Fetched teacher 2: {}", t2);
+    sampleMToN(orm);
   }
 
   private static void sampleMToN(Orm orm) throws SQLException {
     var student1Id = "student_1";
+    var student2Id = "student_2";
+
     var student1 = student(student1Id);
+    var student2 = student(student2Id);
     orm.save(student1);
+    orm.save(student2);
     var teacher1ID = "teacher_1";
     var teacher1 = teacher(teacher1ID);
     orm.save(teacher1);
     var classId1 = "a_class_1";
     var aClass1 = sClassId(teacher1, classId1);
     orm.save(aClass1);
-    aClass1.setStudents(List.of(student1));
+    aClass1.setStudents(List.of(student1, student2));
     orm.save(aClass1);
     var getStudent1 = orm.get(Student.class, student1Id);
+    log.info("Got Student {}", getStudent1);
   }
 
   private static void testMToN(Orm orm) throws SQLException {
