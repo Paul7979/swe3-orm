@@ -37,6 +37,11 @@ public class Orm {
   private final Cache<CacheKeyWrapper, Object> cache;
   private final Cache<ForeignCacheKeyWrapper, Object> foreignKeyCache;
 
+  /**
+   * Creates a orm object, checks the connection String, uses {@link ConnectionFactory}
+   * @param url the connection url eg. "jdbc:postgresql://localhost:5432/postgres?user=platform&password=platform"
+   * @throws SQLException when no connection could be established
+   */
   public Orm(String url) throws SQLException {
     connectionFactory = ConnectionFactory.of(url);
     cache = new InMemoryCache<>();
@@ -44,7 +49,46 @@ public class Orm {
     //foreignKeyCache = new InMemoryCache<>();
   }
 
-  private static String simpleSelectAllInternalFields(Entity entity) {
+  /**
+   * Starts a {@link FluentSelect fluentSelect} chain
+   * @param clazz the type that should be returned
+   * @return the fluentSelect object to start the chain
+   */
+  public FluentSelect select(Class<?> clazz) {
+    return new FluentSelect(Entity.ofClass(clazz), connectionFactory);
+  }
+
+  /**
+   * Deletes all data in the table using the TRUNCATE TABLE Command
+   * @param clazz the class from which the table name is fetched from
+   */
+  public void deleteTableData(Class<?> clazz) {
+    deleteTableData(Entity.ofClass(clazz).getTableName());
+  }
+
+  /**
+   * Deletes all data in the table using the TRUNCATE TABLE Command
+   * @param tableName the table name
+   */
+  public void deleteTableData(String tableName) {
+    var deleteStatement = "TRUNCATE TABLE " + tableName + " CASCADE ";
+    try (
+      var connection = connectionFactory.get();
+      var preparedStatement = connection.prepareStatement(deleteStatement)
+    ) {
+      preparedStatement.execute();
+      log.info("Deleted table data from {}", tableName);
+    } catch (Exception e) {
+      throw new RuntimeException("Error deleting", e);
+    }
+  }
+
+  /**
+   * Creates a simple SELECT statement containing all "simple fields" meaning no joined entities
+   * @param entity the {@link Entity entity} object that is used for the sql creation
+   * @return the created sql
+   */
+   static String simpleSelectAllInternalFields(Entity entity) {
     var columnNames = entity.getEntityFields()
       .stream()
       .filter(not(EntityField::isFK))
@@ -58,6 +102,12 @@ public class Orm {
     return stringSubstitutor.replace(SIMPLE_SELECT_INTERNAL);
   }
 
+  /**
+   * Gets a singe object by id
+   * @param clazz the type of the fetched object
+   * @param ID the id
+   * @throws SQLException when exception occurs
+   */
   public <T> T get(Class<T> clazz, Object ID) throws SQLException {
     var cacheKeyWrapper = new CacheKeyWrapper(clazz, ID);
     var cachedObject = cache.get(cacheKeyWrapper);
@@ -376,7 +426,7 @@ public class Orm {
       defaultValues.put("valuePlaceholder", "?, ?");
       String insert_template = """
         INSERT INTO ${tableName} (${columNames})
-        VALUES (${valuePlaceholder})""";
+        VALUES (${valuePlaceholder}) ON CONFLICT DO NOTHING """;
       var stringSubstitutor = new StringSubstitutor(defaultValues);
       var insertStatement = stringSubstitutor.replace(insert_template);
 

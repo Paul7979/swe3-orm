@@ -63,7 +63,7 @@ create table if not exists courses
 create unique index if not exists table_name_id_uindex
     on courses (id);
 
-create table if not exists student_courses
+create table student_classes
 (
     fk_class   varchar
         constraint student_courses_class_id_fk
@@ -72,5 +72,22 @@ create table if not exists student_courses
         constraint student_courses_student_id_fk
             references student
 );
+
+create unique index student_classes_fk_class_fk_student_uindex
+    on student_classes (fk_class, fk_student);
+
+create table student_courses
+(
+    fk_course  varchar
+        constraint student_courses_class_id_fk
+            references class,
+    fk_student varchar
+        constraint student_courses_student_id_fk
+            references student
+);
+
+create unique index student_courses_fk_course_fk_student_uindex
+    on student_courses (fk_course, fk_student);
+
 
 

@@ -21,8 +21,11 @@ public class Student extends Person {
 
   private LocalDate hireDate;
 
-  @ManyToMany(referencedColumnName = "fk_student", referenceTableName = "student_courses")
+  @ManyToMany(referencedColumnName = "fk_student", referenceTableName = "student_classes")
   private List<SClass> sClass;
+
+  @ManyToMany(referencedColumnName = "fk_student", referenceTableName = "student_courses")
+  private List<Course> courses;
 
   public Student(String id, String name, String firstName, LocalDate birthDate, Gender gender, int grade, LocalDate hireDate, List<SClass> sClass) {
     super(id, name, firstName, birthDate, gender);
