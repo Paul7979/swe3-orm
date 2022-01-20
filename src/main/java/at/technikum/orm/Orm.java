@@ -77,7 +77,7 @@ public class Orm {
       var preparedStatement = connection.prepareStatement(deleteStatement)
     ) {
       preparedStatement.execute();
-      log.info("Deleted table data from {}", tableName);
+      log.debug("Deleted table data from {}", tableName);
     } catch (Exception e) {
       throw new RuntimeException("Error deleting", e);
     }
@@ -113,7 +113,7 @@ public class Orm {
     var cachedObject = cache.get(cacheKeyWrapper);
     var entity = Entity.ofClass(clazz);
     if (cachedObject != null) {
-      log.info("Hit Cache on class {} with id {}", clazz.getSimpleName(), ID);
+      log.debug("Hit Cache on class {} with id {}", clazz.getSimpleName(), ID);
       fillSimpleForeignFields(cachedObject, entity);
       fillMtoNForeignFields(cachedObject, entity);
       return (T) cachedObject;
@@ -135,7 +135,7 @@ public class Orm {
 
     StringSubstitutor stringSubstitutor = new StringSubstitutor(substituteValues);
     var selectStatement = stringSubstitutor.replace(SELECT_TEMPLATE);
-    log.info(selectStatement);
+    log.debug(selectStatement);
     Object o = null;
     try (
       var connection = connectionFactory.get();
@@ -225,7 +225,7 @@ public class Orm {
     try (var connection = connectionFactory.get();
          var preparedStatement = connection.prepareStatement(selectStatement)
     ) {
-      log.info(selectStatement);
+      log.debug(selectStatement);
       preparedStatement.setObject(1, key);
       var entityFields = foreign.getEntityFields().stream().filter(not(EntityField::isFK)).filter(not(EntityField::isManyToMany)).toList();
       Constructor<?> noArgsConstructor = tryToGetNoArgsConstructor(foreign);
@@ -254,7 +254,7 @@ public class Orm {
     try (var connection = connectionFactory.get();
          var preparedStatement = connection.prepareStatement(selectStatement)
     ) {
-      log.info(selectStatement);
+      log.debug(selectStatement);
       preparedStatement.setObject(1, primaryKey);
       var resultSet = preparedStatement.executeQuery();
       List<Object> objects = new ArrayList<>();
@@ -307,7 +307,7 @@ public class Orm {
       var connection = connectionFactory.get();
       var preparedStatement = connection.prepareStatement(selectStatement)
     ) {
-      log.info(selectStatement);
+      log.debug(selectStatement);
       List<Object> objects = new ArrayList<>();
       var entityFields = entity.getEntityFields().stream().filter(not(EntityField::isFK)).filter(not(EntityField::isManyToMany)).toList();
       preparedStatement.setObject(1, primaryKey);
@@ -386,7 +386,7 @@ public class Orm {
 
     values.addAll(valuesWithoutPK);
     var insertStatement = stringSubstitutor.replace(UPSERT_TEMPLATE);
-    log.info(insertStatement);
+    log.debug(insertStatement);
     try (
       var connection = connectionFactory.get();
       var preparedStatement = connection.prepareStatement(insertStatement)
@@ -450,7 +450,7 @@ public class Orm {
       var connection = connectionFactory.get();
       var preparedStatement = connection.prepareStatement(insertStatement)
     ) {
-      log.info(insertStatement);
+      log.debug(insertStatement);
       preparedStatement.setObject(1, pkValue);
       preparedStatement.setObject(2, foreignPkValue);
       preparedStatement.execute();

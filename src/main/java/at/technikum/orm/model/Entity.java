@@ -78,7 +78,7 @@ public class Entity {
 
   public static Entity ofClass(Class<?> clazz) {
     if (entityCache.containsKey(clazz)) {
-      log.info("Entity Cache hit on class {}", clazz.getSimpleName());
+      log.debug("Entity Cache hit on class {}", clazz.getSimpleName());
       return entityCache.get(clazz);
     }
     var entity = new Entity(clazz);

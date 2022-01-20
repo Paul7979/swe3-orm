@@ -19,12 +19,12 @@ public class InMemoryCache<K, V> implements Cache<K, V> {
     Runnable cleaner = new Runnable() {
       @Override
       public void run() {
-        log.info("Starting cleanup");
+        log.debug("Starting cleanup");
         timestampKeyMap.entrySet()
           .stream()
           .filter(offsetDateTimeKEntry -> Duration.between(offsetDateTimeKEntry.getKey(), OffsetDateTime.now()).toSeconds() > 30)
           .forEach(offsetDateTimeKEntry -> cache.remove(offsetDateTimeKEntry.getValue()));
-        log.info("Finished cleanup");
+        log.debug("Finished cleanup");
       }
     };
     ScheduledExecutorService executor = Executors.newScheduledThreadPool(1, r -> {

@@ -90,7 +90,7 @@ public class FluentSelect {
       var connection = connectionFactory.get();
       var preparedStatement = connection.prepareStatement(sql)
     ) {
-      log.info(sql);
+      log.debug(sql);
       for (int i = 0; i < objects.size(); i++) {
         var x = toDbObject(objects.get(i));
         preparedStatement.setObject(i + 1, x);
